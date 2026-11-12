@@ -11,16 +11,16 @@ let topicIndex=0, query='', offset=0, pageSize=10, results=[], seen=new Set(), l
 const topic=()=>topics[topicIndex];
 const sourceUrl=p=>'https://zh.wikipedia.org/?curid='+encodeURIComponent(p.pageid);
 const clean=s=>String(s||'').replace(/<[^>]*>/g,'').trim();
-function setTopic(i){topicIndex=i;query=searches[i][0];offset=0;results=[];seen=new Set();selected=null;saved=new Set();vectors=new Map();queryVector=null;history=[];error='';mode='discover';render();}
+function setTopic(i){topicIndex=i;query=searches[i][0];offset=0;results=[];seen=new Set();selected=null;saved=new Set();vectors=new Map();queryVector=null;history=[];error='';mode='discover';window._hasMore=true;render();}
 function setMode(m){mode=m;render()}
-function newQuery(){const q=$('#search')?.value.trim();if(!q)return;query=q;offset=0;results=[];seen=new Set();selected=null;vectors=new Map();queryVector=null;history=[];error='';render();loadMore();}
-function preset(i){query=searches[topicIndex][i];offset=0;results=[];seen=new Set();selected=null;vectors=new Map();queryVector=null;history=[];error='';render();loadMore()}
+function newQuery(){const q=$('#search')?.value.trim();if(!q)return;query=q;offset=0;results=[];seen=new Set();selected=null;vectors=new Map();queryVector=null;history=[];error='';window._hasMore=true;render();loadMore();}
+function preset(i){query=searches[topicIndex][i];offset=0;results=[];seen=new Set();selected=null;vectors=new Map();queryVector=null;history=[];error='';window._hasMore=true;render();loadMore()}
 async function loadMore(){if(loading)return;loading=true;error='';render();try{
 const p=new URLSearchParams({action:'query',generator:'search',gsrsearch:query,gsrnamespace:'0',gsrlimit:String(pageSize),gsroffset:String(offset),prop:'extracts|info',exintro:'1',explaintext:'1',exchars:'850',inprop:'url',format:'json',origin:'*'});
 const res=await fetch('https://zh.wikipedia.org/w/api.php?'+p);if(!res.ok)throw Error('Wikipedia HTTP '+res.status);const json=await res.json();if(json.error)throw Error(json.error.info||json.error.code);const pages=Object.values(json.query?.pages||{}).sort((a,b)=>(a.index||0)-(b.index||0));for(const p of pages){if(!seen.has(p.pageid)){seen.add(p.pageid);results.push({id:p.pageid,title:p.title,extract:p.extract||'',url:p.fullurl||sourceUrl(p),source:'Wikipedia',query})}}offset=json.continue?.gsroffset??(offset+pageSize);window._hasMore=!!json.continue;history.push({query,count:pages.length,at:new Date().toISOString()});
 }catch(e){error='資料來源查詢失敗：'+e.message+'。未使用替代或虛構資料。'}finally{loading=false;render()}}
 function expand(id){const r=results.find(x=>x.id===id);if(!r)return;selected=id;render();$('#detail')?.scrollIntoView({behavior:'smooth',block:'nearest'})}
-function branch(id){const r=results.find(x=>x.id===id);if(!r)return;query=r.title;offset=0;results=[];seen=new Set();vectors=new Map();queryVector=null;selected=null;history.push({branch:r.title,at:new Date().toISOString()});render();loadMore()}
+function branch(id){const r=results.find(x=>x.id===id);if(!r)return;query=r.title;offset=0;results=[];seen=new Set();vectors=new Map();queryVector=null;selected=null;history.push({branch:r.title,at:new Date().toISOString()});window._hasMore=true;render();loadMore()}
 function toggle(id){saved.has(id)?saved.delete(id):saved.add(id);render()}
 const cos=(a,b)=>a.reduce((v,x,i)=>v+x*b[i],0)/(Math.hypot(...a)*Math.hypot(...b)||1);
 async function rank(){if(calculating||!results.length)return;calculating=true;embeddingStatus='載入真實 multilingual-e5-small 模型';render();try{if(!model){const lib=await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');model=await lib.pipeline('feature-extraction','Xenova/multilingual-e5-small',{quantized:true})}async function vector(s){const out=await model(s,{pooling:'mean',normalize:true});const v=Array.from(out.data);if(v.length!==384||!v.every(Number.isFinite))throw Error('向量格式無效');return v}
