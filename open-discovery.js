@@ -1,0 +1,40 @@
+/* Idea Compass v10 — open retrieval, verifiable sources, optional real embeddings */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
+const topics=MECHANISM_TOPICS;
+const searches=[
+ ['人工智慧 長期記憶','記憶鞏固','事件溯源','資訊瓶頸'],
+ ['群體極化','社會網路分析','回饋迴路','群體認同'],
+ ['都市洪水','分散式系統','流量控制','韌性工程']
+];
+let topicIndex=0, query='', offset=0, pageSize=10, results=[], seen=new Set(), loading=false, error='', selected=null, saved=new Set(), model=null, calculating=false, embeddingStatus='', vectors=new Map(), queryVector=null, mode='discover', history=[];
+const topic=()=>topics[topicIndex];
+const sourceUrl=p=>'https://zh.wikipedia.org/?curid='+encodeURIComponent(p.pageid);
+const clean=s=>String(s||'').replace(/<[^>]*>/g,'').trim();
+function setTopic(i){topicIndex=i;query=searches[i][0];offset=0;results=[];seen=new Set();selected=null;saved=new Set();vectors=new Map();queryVector=null;history=[];error='';mode='discover';render();}
+function setMode(m){mode=m;render()}
+function newQuery(){const q=$('#search')?.value.trim();if(!q)return;query=q;offset=0;results=[];seen=new Set();selected=null;vectors=new Map();queryVector=null;history=[];error='';render();loadMore();}
+function preset(i){query=searches[topicIndex][i];offset=0;results=[];seen=new Set();selected=null;vectors=new Map();queryVector=null;history=[];error='';render();loadMore()}
+async function loadMore(){if(loading)return;loading=true;error='';render();try{
+const p=new URLSearchParams({action:'query',generator:'search',gsrsearch:query,gsrnamespace:'0',gsrlimit:String(pageSize),gsroffset:String(offset),prop:'extracts|info',exintro:'1',explaintext:'1',exchars:'850',inprop:'url',format:'json',origin:'*'});
+const res=await fetch('https://zh.wikipedia.org/w/api.php?'+p);if(!res.ok)throw Error('Wikipedia HTTP '+res.status);const json=await res.json();if(json.error)throw Error(json.error.info||json.error.code);const pages=Object.values(json.query?.pages||{}).sort((a,b)=>(a.index||0)-(b.index||0));for(const p of pages){if(!seen.has(p.pageid)){seen.add(p.pageid);results.push({id:p.pageid,title:p.title,extract:p.extract||'',url:p.fullurl||sourceUrl(p),source:'Wikipedia',query})}}offset=json.continue?.gsroffset??(offset+pageSize);window._hasMore=!!json.continue;history.push({query,count:pages.length,at:new Date().toISOString()});
+}catch(e){error='資料來源查詢失敗：'+e.message+'。未使用替代或虛構資料。'}finally{loading=false;render()}}
+function expand(id){const r=results.find(x=>x.id===id);if(!r)return;selected=id;render();$('#detail')?.scrollIntoView({behavior:'smooth',block:'nearest'})}
+function branch(id){const r=results.find(x=>x.id===id);if(!r)return;query=r.title;offset=0;results=[];seen=new Set();vectors=new Map();queryVector=null;selected=null;history.push({branch:r.title,at:new Date().toISOString()});render();loadMore()}
+function toggle(id){saved.has(id)?saved.delete(id):saved.add(id);render()}
+const cos=(a,b)=>a.reduce((v,x,i)=>v+x*b[i],0)/(Math.hypot(...a)*Math.hypot(...b)||1);
+async function rank(){if(calculating||!results.length)return;calculating=true;embeddingStatus='載入真實 multilingual-e5-small 模型';render();try{if(!model){const lib=await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');model=await lib.pipeline('feature-extraction','Xenova/multilingual-e5-small',{quantized:true})}async function vector(s){const out=await model(s,{pooling:'mean',normalize:true});const v=Array.from(out.data);if(v.length!==384||!v.every(Number.isFinite))throw Error('向量格式無效');return v}
+queryVector=await vector('query: '+topic().question+'。探索方向：'+query);for(let i=0;i<results.length;i++){const r=results[i];if(!vectors.has(r.id)){embeddingStatus='真實向量運算 '+(i+1)+' / '+results.length;render();vectors.set(r.id,await vector('passage: '+r.title+'。'+r.extract))}}embeddingStatus='完成；相似度僅表示語意接近，不代表創意價值或因果成立';
+}catch(e){embeddingStatus='計算失敗：'+e.message}finally{calculating=false;render()}}
+function promptText(){const items=results.filter(r=>saved.has(r.id));return '研究問題：'+topic().question+'\n探索方向：'+query+'\n請根據以下可追溯的知識來源，提出跨領域結構類比與互補組合。逐一區分文獻事實、類比假說與尚未驗證的推論；不要捏造證據。\n\n'+items.map((r,i)=>(i+1)+'. '+r.title+'\n來源：'+r.url+'\n百科摘要：'+r.extract).join('\n\n')+'\n\n請列出適用前提、可能失敗原因與可驗證實驗。';}
+async function copyPrompt(){try{await navigator.clipboard.writeText(promptText());alert('已複製')}catch(e){alert('複製失敗，請手動選取文字')}}
+function render(){
+const ordered=[...results];if(queryVector)ordered.sort((a,b)=>(vectors.has(b.id)?cos(queryVector,vectors.get(b.id)):-2)-(vectors.has(a.id)?cos(queryVector,vectors.get(a.id)):-2));
+const chosen=results.filter(r=>saved.has(r.id));const current=results.find(r=>r.id===selected);
+$('#app').innerHTML='<header><h1>Idea Compass <span>v10.0</span></h1><p>Open Knowledge Discovery · 真實來源 · 無固定中繼點數量</p></header><div class="shell"><aside class="panel"><h3>三個固定研究問題</h3>'+topics.map((t,i)=>'<button class="topic '+(i===topicIndex?'active':'')+'" onclick="setTopic('+i+')">'+esc(t.question)+'</button>').join('')+'<p class="muted">知識來源：維基百科公開 API。每次請求分頁載入，沒有預先設定總節點數。資料來源有覆蓋範圍限制，不能聲稱窮盡人類知識。</p><h3>探索路徑</h3><p class="muted">'+history.length+' 次查詢／展開記錄（本次工作階段）</p></aside><main><section class="panel"><h2>'+esc(topic().question)+'</h2><div class="actions"><button class="'+(mode==='discover'?'primary':'')+'" onclick="setMode(\'discover\')">探索知識</button><button class="'+(mode==='combine'?'primary':'')+'" onclick="setMode(\'combine\')">創意組合 ('+saved.size+')</button></div></section>'+
+(mode==='combine'?'<section class="panel"><h2>跨知識創意組合</h2><p class="muted">選擇至少兩個來源，生成供 AI 進一步推理的可追溯研究指令。這不是已驗證的創意成果。</p><textarea rows="18" readonly>'+esc(promptText())+'</textarea><div class="actions"><button onclick="copyPrompt()">複製研究指令</button></div></section>':
+'<section class="panel"><h2>開放式知識探索</h2><p class="muted">可以輸入任意知識概念、跨領域關係或機制名稱；也可以點擊來源標題繼續探索。中繼點由實際搜尋結果動態增加，不限定數量或類型。</p><div class="actions"><input id="search" aria-label="知識搜尋" value="'+esc(query)+'" style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd8eb;border-radius:8px" onkeydown="if(event.key===\'Enter\')newQuery()"><button class="primary" onclick="newQuery()">搜尋真實知識</button></div><div class="actions">'+searches[topicIndex].map((s,i)=>'<button onclick="preset('+i+')">'+esc(s)+'</button>').join('')+'</div><p class="muted">已發現 '+results.length+' 個不重複來源 · '+esc(embeddingStatus||'未執行語意向量計算')+'</p><div class="actions"><button onclick="rank()" '+(calculating||!results.length?'disabled':'')+'>'+(calculating?'計算中…':'用真實 Embedding 排序目前來源')+'</button><button onclick="loadMore()" '+(loading||!window._hasMore?'disabled':'')+'>'+(loading?'載入中…':'探索更多來源')+'</button></div>'+(error?'<p role="alert" style="color:#b91c1c">'+esc(error)+'</p>':'')+'<p class="muted">來源標題與摘要來自 Wikipedia API；語意分數來自 Xenova/multilingual-e5-small。百科摘要不是原始研究證據，類比與創意尚待驗證。</p></section>'+
+(current?'<section class="panel" id="detail"><div class="between"><h2>'+esc(current.title)+'</h2><button onclick="selected=null;render()">關閉</button></div><p>'+esc(current.extract||'此頁沒有可用摘要')+'</p><p><a href="'+esc(current.url)+'" target="_blank" rel="noopener noreferrer">查看原始來源</a></p><div class="actions"><button class="primary" onclick="branch('+current.id+')">以此概念繼續探索</button><button onclick="toggle('+current.id+')">'+(saved.has(current.id)?'取消收藏':'加入創意組合')+'</button></div></section>':'')+
+'<section class="panel"><h2>知識來源（'+results.length+'）</h2>'+ordered.map(r=>'<div class="listitem"><div><b>'+esc(r.title)+'</b><p class="muted">'+esc(r.source)+' · '+(queryVector&&vectors.has(r.id)?'語意相似度 '+cos(queryVector,vectors.get(r.id)).toFixed(4):'未排序')+'</p><p>'+esc(r.extract.slice(0,210)||'沒有摘要')+'</p><p><a href="'+esc(r.url)+'" target="_blank" rel="noopener noreferrer">原始來源</a></p></div><div><button onclick="expand('+r.id+')">詳情</button><button onclick="branch('+r.id+')">延伸</button><button onclick="toggle('+r.id+')">'+(saved.has(r.id)?'已選':'收藏')+'</button></div></div>').join('')+'</section>')+'</main></div><footer>Idea Compass v10.0 · 開放式來源檢索 · 模型推論不是因果證據</footer>';
+}
+query=searches[0][0];window._hasMore=true;render();loadMore();
