@@ -1,43 +1,36 @@
-# Idea Compass — Precomputed Vector Demo
+# Idea Compass v5 — GitHub Pages Demo
 
-Static GitHub Pages app for concentric-circle discovery of 70 Chinese knowledge concepts around **AI 教學系統**.
+A zero-backend, no-API-key, static Traditional Chinese interactive knowledge exploration website.
+
+## Run locally
+
+Open `index.html` in a modern browser. All files are static; no build step is required.
+
+## Publish on GitHub Pages
+
+1. Upload `index.html`, `app.js`, and `data.js` to the **root** of the `kevcltsai/idea-compass-demo` repository (replace existing `index.html` if necessary).
+2. In GitHub repository **Settings → Pages**, select **Deploy from a branch**, branch **main**, folder **/(root)**, then **Save**.
+3. Visit `https://kevcltsai.github.io/idea-compass-demo/` after Pages publishes.
+
+Alternatively, if the repository already uses a GitHub Actions Pages deployment workflow, keep that workflow and commit these files to the published branch/directory.
 
 ## Features
 
-- Recursively recenter on any topic (deep dive beyond the first level)
-- Near / cross-domain / distant rings, ranked by precomputed vector similarity
-- Search all concepts, keep exploration history, select and combine concepts
-- Offline rule/template-based Idea Mixer with copyable AI prompts
-- No API keys, backend, login, cookies, or per-user LLM charges
+- 10 curated demo topics
+- 340 knowledge nodes total, 3 levels per topic (6 first-level, 24 second-level, 24 third-level)
+- Editable demonstration radius, interactive SVG, knowledge-center navigation, breadcrumb history
+- Cross-branch collection and N-to-1 rule-based synthesis with 3 solution archetypes
+- Browser-local persistence, text export, responsive desktop/mobile layout
 
-## Deploy to GitHub Pages
+## Important limitations
 
-1. Create a new **public** GitHub repository, e.g. `idea-compass-demo`.
-2. Upload the **contents of this folder** to the root of the `main` branch (including `.github/workflows/pages.yml`, `.nojekyll` and `data/knowledge.json`).
-3. In the repository open **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**.
-4. Open **Actions** and verify the “Deploy Idea Compass to GitHub Pages” workflow succeeded.
-5. Visit `https://YOUR-USERNAME.github.io/idea-compass-demo/` (or check Settings → Pages for the actual URL).
+- The displayed radial distances are **editorial demonstration values**, not actual embedding distances.
+- Knowledge links are curated tree branches; this is not a live graph/vector search engine.
+- Synthesis uses deterministic templates, **not** a live LLM. Different selected knowledge items feed into the displayed mechanisms, but the output is not independently validated research.
+- No backend, API key, tracking, or paid hosting dependency is needed.
 
-## Local preview
+## Files
 
-```bash
-python3 -m http.server 8000
-# open http://localhost:8000
-```
-
-## Vector calculation
-
-`data/knowledge.json` is committed and ready to use. It contains 70 curated domain concepts, 48D latent vectors and all pairwise precomputed similarity scores. To regenerate it:
-
-```bash
-pip install numpy scikit-learn
-python scripts/build_vectors.py
-```
-
-**Important:** This uses *character n-gram TF-IDF + TruncatedSVD (48 dimensions)*, combining the full TF-IDF cosine score (55%) with a nonnegative SVD cosine score (45%). It is a reproducible **corpus-specific statistical vector demo**, **not a pretrained neural embedding model** and **not an OpenAI Embedding**. Distances reflect text similarity in the curated corpus and are not validated creativity scores. Visual rings show relative similarity ranks among the corpus, not a universal metric distance scale.
-
-For a next version, replace the vector build script with an actual multilingual embedding model and keep the same `knowledge.json` data contract (`nodes` and `similarity`).
-
-## Notes
-
-Everything is client-side. The idea combinations are templates, not live LLM synthesis. If you host on a public repository, all concept descriptions and vectors are publicly accessible.
+- `index.html`: layout and CSS
+- `data.js`: topics and curated knowledge nodes
+- `app.js`: exploration and synthesis logic
